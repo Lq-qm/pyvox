@@ -92,10 +92,3 @@ modelo pronto em 1.3s
 1. O texto é dividido em segmentos (linhas, com chunking por sentenças).
 2. O `KPipeline` converte cada segmento em fonemas (G2P) e sintetiza o áudio na CPU.
 3. Os chunks (24 kHz, 16-bit PCM) são gravados incrementalmente no `.wav`, com progresso na linha de comando e RTF ao final.
-
-## 📝 Notas
-
-- A **1ª execução** baixa o modelo (~330 MB) e a voz escolhida do Hugging Face (cache em `~/.cache/huggingface`).
-- Textos longos em CPU podem demorar — use `--max-chars` para testar; `Ctrl+C` interrompe mantendo o áudio já gerado.
-- Para GPU no futuro: basta trocar `device="cpu"` por `"cuda"` em `pyvox.py`.
-
