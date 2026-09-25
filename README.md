@@ -10,6 +10,7 @@
 
 - 📖 Narra qualquer arquivo `.txt` (ou texto direto via `--text`)
 - 🗣️ Motor **Kokoro-82M** com vozes em 9 idiomas (pt-br, en-us, en-gb, es, fr-fr, hi, it, ja, zh)
+- 🎤 Narrador masculino / narradora feminina com `--narrador`
 - ⚙️ **Somente CPU** por enquanto — sem GPU, sem CUDA
 - 📊 Progresso em tempo real com tempo de áudio, tempo de CPU e RTF (razão tempo real)
 - ▶️ Reprodução do resultado com `--play` (ffplay/mpv/aplay)
@@ -40,11 +41,17 @@ uv pip install -r requirements.txt
 ## 📖 Uso
 
 ```bash
-# Narrar um arquivo (padrão: pt-br, voz pf_dora) → gera <arquivo>.wav
+# Narrar um arquivo (padrão: pt-br, narradora pf_dora) → gera <arquivo>.wav
 .venv/bin/python pyvox.py meu_texto.txt -o saida.wav
 
-# Escolher voz, velocidade e tocar o resultado
-.venv/bin/python pyvox.py meu_texto.txt --voice pm_lennon --speed 1.2 --play
+# Narrador masculino (pt-br: pm_alex)
+.venv/bin/python pyvox.py meu_texto.txt --narrador masculino
+
+# Narradora feminina + velocidade + tocar o resultado
+.venv/bin/python pyvox.py meu_texto.txt --narrador feminino --speed 1.2 --play
+
+# Escolher uma voz exata
+.venv/bin/python pyvox.py meu_texto.txt --voice pm_santa
 
 # Listar as vozes disponíveis para um idioma
 .venv/bin/python pyvox.py --list-voices --lang pt-br
@@ -63,7 +70,8 @@ uv pip install -r requirements.txt
 | `file` | arquivo `.txt` a narrar (opcional com `--text`) |
 | `--text TEXT` | narra texto direto, sem arquivo |
 | `-l, --lang` | idioma: `pt-br` (padrão), `en-us`, `en-gb`, `es`, `fr-fr`, `hi`, `it`, `ja`, `zh` |
-| `-v, --voice` | voz a usar (ex.: `pf_dora`, `pm_lennon` — veja `--list-voices`) |
+| `-g, --narrador` | `m`/`masculino` (narrador) ou `f`/`feminino` (narradora) — pt-br: m=`pm_alex`, f=`pf_dora` |
+| `-v, --voice` | voz exata a usar (ex.: `pf_dora`, `pm_alex` — veja `--list-voices`) |
 | `-s, --speed` | velocidade da fala (`0.5` = metade, `1.5` = 50% mais rápido; padrão `1.0`) |
 | `-o, --output` | arquivo `.wav` de saída (padrão: `<arquivo>.wav`) |
 | `--threads N` | threads de CPU (padrão: todos os núcleos) |
@@ -92,3 +100,26 @@ modelo pronto em 1.3s
 1. O texto é dividido em segmentos (linhas, com chunking por sentenças).
 2. O `KPipeline` converte cada segmento em fonemas (G2P) e sintetiza o áudio na CPU.
 3. Os chunks (24 kHz, 16-bit PCM) são gravados incrementalmente no `.wav`, com progresso na linha de comando e RTF ao final.
+
+## 🎤 Narradores por idioma
+
+| Idioma | Narrador (m) | Narradora (f) |
+|---|---|---|
+| pt-br | `pm_alex` | `pf_dora` |
+| en-us | `am_michael` | `af_heart` |
+| en-gb | `bm_fable` | `bf_emma` |
+| es | `em_alex` | `ef_dora` |
+| fr-fr | — (não disponível) | `ff_siwis` |
+| hi | `hm_omega` | `hf_alpha` |
+| it | `im_nicola` | `if_sara` |
+| ja | `jm_kumo` | `jf_alpha` |
+| zh | `zm_yunjian` | `zf_xiaobei` |
+
+Outras vozes por idioma existem — veja `--list-voices` e use `--voice`.
+
+## 📝 Notas
+
+- A **1ª execução** baixa o modelo (~330 MB) e a voz escolhida do Hugging Face (cache em `~/.cache/huggingface`).
+- Textos longos em CPU podem demorar — use `--max-chars` para testar; `Ctrl+C` interrompe mantendo o áudio já gerado.
+- Para GPU no futuro: basta trocar `device="cpu"` por `"cuda"` em `pyvox.py`.
+

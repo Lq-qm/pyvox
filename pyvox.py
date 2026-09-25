@@ -5,8 +5,9 @@ Exemplos:
     # Narrar um arquivo (padrão: português brasileiro, voz pf_dora)
     python pyvox.py "meu_texto.txt" -o narracao.wav
 
-    # Escolher voz, velocidade e tocar o resultado
-    python pyvox.py livro.txt --voice pm_lennon --speed 1.2 --play
+    # Narrador masculino / narradora feminina
+    python pyvox.py texto.txt --narrador masculino
+    python pyvox.py texto.txt --narrador feminino --speed 1.1 --play
 
     # Listar vozes disponíveis para o idioma
     python pyvox.py --list-voices --lang pt-br
@@ -48,12 +49,36 @@ DEFAULT_VOICES: dict[str, str] = {
     "a": "af_heart",
     "b": "bf_emma",
     "e": "ef_dora",
-    "f": "ff_sara",
+    "f": "ff_siwis",
     "h": "hf_alpha",
     "i": "if_sara",
     "j": "jf_alpha",
     "z": "zf_xiaobei",
 }
+
+# Narrador (m) e narradora (f) por idioma — escolha curada do Kokoro-82M.
+# Obs.: fr-fr só tem voz feminina disponível no modelo (ff_siwis).
+NARRATOR_VOICES: dict[str, dict[str, str]] = {
+    "p": {"m": "pm_alex", "f": "pf_dora"},
+    "a": {"m": "am_michael", "f": "af_heart"},
+    "b": {"m": "bm_fable", "f": "bf_emma"},
+    "e": {"m": "em_alex", "f": "ef_dora"},
+    "f": {"f": "ff_siwis"},
+    "h": {"m": "hm_omega", "f": "hf_alpha"},
+    "i": {"m": "im_nicola", "f": "if_sara"},
+    "j": {"m": "jm_kumo", "f": "jf_alpha"},
+    "z": {"m": "zm_yunjian", "f": "zf_xiaobei"},
+}
+
+
+def _gender(value: str) -> str:
+    """Normaliza a opção --narrador para 'm' ou 'f'."""
+    v = value.strip().lower()
+    if v in ("m", "masculino", "masculine", "homem", "male"):
+        return "m"
+    if v in ("f", "feminino", "feminine", "mulher", "female"):
+        return "f"
+    raise argparse.ArgumentTypeError(f"use 'm' (masculino) ou 'f' (feminino), recebido: {value!r}")
 
 
 # --------------------------------------------------------------------------- #
@@ -67,7 +92,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         epilog=(
             "exemplos:\n"
             '  pyvox.py "meu texto.txt" -o saida.wav --play\n'
-            "  pyvox.py livro.txt --lang pt-br --voice pf_dora --speed 1.1\n"
+            "  pyvox.py texto.txt --narrador masculino\n"
+            "  pyvox.py texto.txt --narrador feminino --speed 1.1\n"
             "  pyvox.py --list-voices --lang pt-br\n"
             '  pyvox.py --text "Olá, mundo."\n'
         ),
@@ -76,8 +102,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--text", help="texto para narrar diretamente (ignora o arquivo)")
     p.add_argument("-l", "--lang", default="pt-br", choices=sorted(LANGS),
                    help="idioma do texto (padrão: pt-br)")
+    p.add_argument("-g", "--narrador", type=_gender,
+                   help="narrador: m/masculino ou f/feminino (pt-br: m=pm_alex, f=pf_dora)")
     p.add_argument("-v", "--voice",
-                   help=f"voz a usar (padrão por idioma, ex.: {DEFAULT_VOICES['p']} para pt-br; use --list-voices)")
+                   help=f"voz exata a usar (ex.: {DEFAULT_VOICES['p']} para pt-br; --narrador ou --list-voices)")
     p.add_argument("-s", "--speed", type=float, default=1.0,
                    help="velocidade da fala, 0.5 = metade, 1.5 = 1.5x (padrão: 1.0)")
     p.add_argument("-o", "--output", help="arquivo .wav de saída (padrão: <arquivo>.wav ou narração.wav)")
@@ -93,18 +121,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # --------------------------------------------------------------------------- #
 # Vozes
 # --------------------------------------------------------------------------- #
-def list_voices(repo_id: str = DEFAULT_REPO) -> list[str]:
-    """Busca a lista de vozes no repositório Hugging Face (com fallback offline)."""
+def list_voices(lang_code: str | None = None, repo_id: str = DEFAULT_REPO) -> list[str]:
+    """Busca as vozes do idioma no Hugging Face (com fallback offline).
+
+    Vozes seguem o padrão <idioma><gênero>_, ex.: pf_dora (pt feminina), pm_alex (pt masculina).
+    """
+    prefixes = (f"{lang_code}f", f"{lang_code}m") if lang_code else None
+
+    def _match(voice: str) -> bool:
+        return prefixes is None or voice.startswith(prefixes)
+
     url = f"https://huggingface.co/api/models/{repo_id}/tree/main/voices"
     try:
         with urllib.request.urlopen(url, timeout=15) as resp:
             data = json.load(resp)
-        voices = sorted(d["path"].rsplit("/", 1)[-1][:-3] for d in data if d["path"].endswith(".pt"))
+        voices = sorted(d["path"].rsplit("/", 1)[-1][:-3]
+                        for d in data if d["path"].endswith(".pt") and _match(d["path"].rsplit("/", 1)[-1][:-3]))
         if voices:
             return voices
     except Exception as e:  # offline, repo inexistente, etc.
         print(f"aviso: não foi possível consultar o Hugging Face ({e}); mostrando só as vozes padrão", file=sys.stderr)
-    return sorted(DEFAULT_VOICES.values())
+    pool = set(DEFAULT_VOICES.values()) | set(v for d in NARRATOR_VOICES.values() for v in d.values())
+    return sorted(v for v in pool if _match(v))
 
 
 # --------------------------------------------------------------------------- #
@@ -190,9 +228,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_voices:
         lang_code = LANGS[args.lang]
         default = DEFAULT_VOICES.get(lang_code, "")
+        roles = {v: ("narrador" if g == "m" else "narradora")
+                 for g, v in NARRATOR_VOICES.get(lang_code, {}).items()}
         print(f"vozes disponíveis para {args.lang} ({DEFAULT_REPO}):")
-        for v in list_voices():
-            mark = "  (padrão)" if v == default else ""
+        for v in list_voices(lang_code):
+            mark = f"  ({roles[v]})" if v in roles else ("  (padrão)" if v == default else "")
             print(f"  {v}{mark}")
         return 0
 
@@ -220,7 +260,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     output = args.output or f"{base}.wav"
-    voice = args.voice or DEFAULT_VOICES[LANGS[args.lang]]
+
+    # Voz: --voice (exata) > --narrador (m/f) > padrão do idioma
+    lang_code = LANGS[args.lang]
+    if args.voice:
+        voice = args.voice
+    elif args.narrador:
+        candidates = NARRATOR_VOICES.get(lang_code, {})
+        if args.narrador not in candidates:
+            nome = "masculino" if args.narrador == "m" else "feminino"
+            print(f"erro: o idioma {args.lang} não tem voz {nome} no Kokoro-82M "
+                  f"(use --voice para escolher outra)", file=sys.stderr)
+            return 1
+        voice = candidates[args.narrador]
+    else:
+        voice = DEFAULT_VOICES[lang_code]
 
     try:
         stats = synthesize(text, args.lang, voice, args.speed, output, args.threads)
