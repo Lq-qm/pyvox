@@ -30,6 +30,16 @@ SaidaDir = Path(__file__).resolve().parent / "saida"
 
 NARRATOR_LABELS = ["automática (padrão)", "masculino", "feminino"]
 
+# Coluna única centralizada (largura máxima ~740px)
+CSS = """
+#pyvox-col {
+    max-width: 740px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+}
+"""
+
 
 def _voices_for(lang: str) -> list[str]:
     """Vozes do idioma (Hugging Face com fallback offline), sempre com 'automática'."""
@@ -153,50 +163,39 @@ def build_demo() -> gr.Blocks:
             "Cole um texto, envie um `.txt`, escolha a voz e clique em **Gerar**."
         )
 
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=5):
-                text_box = gr.Textbox(
-                    label="Texto",
-                    placeholder=(
-                        "Cole seu texto aqui…\n\n"
-                        "“Era uma noite de inverno, e a cidade dormia sob um "
-                        "silêncio profundo. Mas quem percebeu a primeira estrela?”"
-                    ),
-                    lines=8,
-                )
-                with gr.Row():
-                    file_in = gr.File(label="ou envie um arquivo .txt",
-                                      file_types=[".txt", ".md"],
-                                      file_count="single", scale=3)
-                    load_btn = gr.Button("➜ carregar no editor", scale=1)
-                load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
-                with gr.Row():
-                    lang = gr.Dropdown(lang_options, value="pt-br",
-                                       label="Idioma", scale=1)
-                    narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
-                                        label="Narrador", scale=2)
-                voice = gr.Dropdown(["automática"], value="automática",
-                                    label="Voz exata (opcional)")
-                with gr.Row():
-                    speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
-                                      label="Velocidade (1.0 = natural)")
-                    threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
-                                        label="Threads de CPU")
-                max_chars_in = gr.Number(0, None, step=100, precision=0,
-                                         label="Máx. de caracteres (0 = sem limite)")
-                btn = gr.Button("🎧 Gerar narração", variant="primary")
+        with gr.Column(elem_id="pyvox-col"):
+            text_box = gr.Textbox(
+                label="Texto",
+                placeholder=(
+                    "Cole seu texto aqui…\n\n"
+                    "“Era uma noite de inverno, e a cidade dormia sob um "
+                    "silêncio profundo. Mas quem percebeu a primeira estrela?”"
+                ),
+                lines=8,
+            )
+            with gr.Row():
+                file_in = gr.File(label="ou envie um arquivo .txt",
+                                  file_types=[".txt", ".md"],
+                                  file_count="single", scale=3)
+                load_btn = gr.Button("➜ carregar no editor", scale=1)
+            load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
+            with gr.Row():
+                lang = gr.Dropdown(lang_options, value="pt-br", label="Idioma", scale=1)
+                narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
+                                    label="Narrador", scale=2)
+            voice = gr.Dropdown(["automática"], value="automática",
+                                label="Voz exata (opcional)")
+            with gr.Row():
+                speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
+                                  label="Velocidade (1.0 = natural)")
+                threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
+                                    label="Threads de CPU")
+            max_chars_in = gr.Number(0, None, step=100, precision=0,
+                                     label="Máx. de caracteres (0 = sem limite)")
+            btn = gr.Button("🎧 Gerar narração", variant="primary")
 
-            with gr.Column(scale=4):
-                status = gr.Markdown("aguardando…")
-                audio = gr.Audio(type="filepath", label="Áudio", autoplay=True)
-                gr.Examples(
-                    examples=[["Era uma noite de inverno, e a cidade dormia sob um silêncio profundo. "
-                               "Mas quem percebeu a primeira estrela? O céu, até então apagado, "
-                               "revelou um brilho inesperado. ACHARAM O NAVIO!",
-                              "pt-br", "automática (padrão)", "automática", 1.0, cpu, 0]],
-                    inputs=[text_box, lang, narrator, voice, speed, threads, max_chars_in],
-                    label="exemplo rápido",
-                )
+            status = gr.Markdown("aguardando…")
+            audio = gr.Audio(type="filepath", label="Áudio", autoplay=True)
         gr.Markdown(
             "<details><summary>💡 dicas</summary><br>"
             "• O **primeiro clique** baixa o modelo Kokoro-82M (~330 MB) — depois fica em cache.<br>"
@@ -245,7 +244,7 @@ def main() -> None:
     demo = build_demo()
     demo.queue(default_concurrency_limit=1, api_open=False)  # 1 síntese por vez (CPU)
     demo.launch(server_name=args.host, server_port=args.port,
-                theme=gr.themes.Soft(),
+                theme=gr.themes.Soft(), css=CSS,
                 share=args.share, inbrowser=False)
 
 
