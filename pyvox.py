@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -148,36 +149,55 @@ def list_voices(lang_code: str | None = None, repo_id: str = DEFAULT_REPO) -> li
 # --------------------------------------------------------------------------- #
 # Síntese
 # --------------------------------------------------------------------------- #
-def synthesize(text: str, lang: str, voice: str, speed: float, output: str, threads: int) -> dict:
-    """Gera o áudio com Kokoro e grava em WAV. Retorna estatísticas da síntese."""
-    import os as _os
-    _os.environ.setdefault("HF_HUB_DISABLE_UNAUTHENTICATED_WARNING", "1")
+_PIPELINES: dict[str, object] = {}
+_PIPELINE_LOCK = threading.Lock()
 
-    import warnings
-    warnings.simplefilter("ignore")  # silencia warnings internos do torch no init do modelo
 
-    import torch  # import tardio: mantém --list-voices/--help rápidos
-    torch.set_num_threads(max(1, threads))
+def get_pipeline(lang: str, threads: int = 0, log=None):
+    """KPipeline em cache — uma instância por idioma (evita recarregar o modelo)."""
+    log = log or (lambda m: None)
+    lang_code = LANGS[lang]
+    with _PIPELINE_LOCK:
+        pipe = _PIPELINES.get(lang_code)
+        if pipe is not None:
+            return pipe
 
-    from loguru import logger
-    logger.remove()  # silencia os logs internos do Kokoro/misaki
+        import os as _os
+        _os.environ.setdefault("HF_HUB_DISABLE_UNAUTHENTICATED_WARNING", "1")
 
-    from kokoro import KPipeline
+        import warnings
+        warnings.simplefilter("ignore")  # silencia warnings internos do torch no init
+
+        import torch  # import tardio: mantém --list-voices/--help rápidos
+        if threads:
+            torch.set_num_threads(max(1, threads))
+
+        from loguru import logger
+        logger.remove()  # silencia os logs internos do Kokoro/misaki
+
+        from kokoro import KPipeline
+
+        log(f"carregando modelo Kokoro-82M ({lang}, cpu)…")
+        t0 = time.time()
+        pipe = KPipeline(lang_code=lang_code, repo_id=DEFAULT_REPO, device="cpu")
+        log(f"modelo pronto em {time.time() - t0:.1f}s")
+        _PIPELINES[lang_code] = pipe
+        return pipe
+
+
+def synthesize_stream(text: str, lang: str, voice: str, speed: float, output: str,
+                      threads: int = 0, log=None):
+    """Generator de síntese: *yielda* uma linha de progresso (str) por chunk e,
+    por último, um dict de estatísticas. Serve tanto ao CLI quanto à interface web."""
     import soundfile as sf
 
-    lang_code = LANGS[lang]
-    print(f"carregando modelo Kokoro-82M ({lang}, voz={voice}, cpu)…")
-    t0 = time.time()
-    pipeline = KPipeline(lang_code=lang_code, repo_id=DEFAULT_REPO, device="cpu")
-    t_load = time.time() - t0
-    print(f"modelo pronto em {t_load:.1f}s")
-
+    pipe = get_pipeline(lang, threads=threads, log=log)
+    writer = sf.SoundFile(output, samplerate=SAMPLE_RATE, channels=1, subtype="PCM_16", mode="w")
     t0 = time.time()
     audio_seconds = 0.0
     chunks = 0
-    writer = sf.SoundFile(output, samplerate=SAMPLE_RATE, channels=1, subtype="PCM_16", mode="w")
     try:
-        for result in pipeline(text, voice=voice, speed=speed):
+        for result in pipe(text, voice=voice, speed=speed):
             audio = result.audio
             if audio is None:
                 continue
@@ -187,20 +207,31 @@ def synthesize(text: str, lang: str, voice: str, speed: float, output: str, thre
             chunks += 1
             preview = (result.graphemes or "").strip().replace("\n", " ")
             preview = preview[:48] + ("…" if len(preview) > 48 else "")
-            line = (f"\r[{chunks:>4}] {audio_seconds:8.1f}s de áudio | "
-                    f"{time.time() - t0:8.1f}s cpu | “{preview}”")
-            print(line[:120], end="", flush=True)
+            yield (f"[{chunks:>4}] {audio_seconds:8.1f}s de áudio | "
+                   f"{time.time() - t0:8.1f}s cpu | “{preview}”")
     finally:
         writer.close()
-    print()
     elapsed = time.time() - t0
-    return {
+    yield {
         "output": output,
         "audio_seconds": audio_seconds,
         "chunks": chunks,
         "elapsed": elapsed,
         "rtf": (elapsed / audio_seconds) if audio_seconds else float("inf"),
     }
+
+
+def synthesize(text: str, lang: str, voice: str, speed: float, output: str, threads: int) -> dict:
+    """Gera o áudio com Kokoro e grava em WAV. Retorna estatísticas da síntese."""
+    stats: dict | None = None
+    for item in synthesize_stream(text, lang, voice, speed, output, threads, log=print):
+        if isinstance(item, dict):
+            stats = item
+        else:
+            print(("\r" + item)[:120], end="", flush=True)
+    print()
+    assert stats is not None
+    return stats
 
 
 # --------------------------------------------------------------------------- #

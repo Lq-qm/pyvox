@@ -38,7 +38,28 @@ uv pip install -i https://download.pytorch.org/whl/cpu torch
 uv pip install -r requirements.txt
 ```
 
-## 📖 Uso
+## 🌐 Interface web (Gradio)
+
+```bash
+.venv/bin/python app.py                  # abre em http://127.0.0.1:7860
+.venv/bin/python app.py --port 8080
+.venv/bin/python app.py --host 0.0.0.0   # acessível na rede local
+.venv/bin/python app.py --share          # link público temporário (túnel Gradio)
+```
+
+O que a UI oferece:
+
+- 📝 texto colado ou upload de `.txt`/`.md` (botão “carregar no editor”)
+- 🌍 9 idiomas, com lista de vozes atualizada por idioma (Hugging Face + fallback offline)
+- 🎤 narrador masculino / feminino, ou voz exata (`pf_dora`, `pm_alex`, …)
+- 🎚️ velocidade, threads de CPU e limite de caracteres
+- ⏳ progresso em tempo real (chunk a chunk, com RTF ao final)
+- ▶️ player com autoplay + download; arquivos ficam salvos em `saida/`
+
+O modelo Kokoro fica em cache na memória do processo — o 1º clique baixa
+(~330 MB), os seguintes são instantâneos. Para livros inteiros, prefira o CLI.
+
+## 📖 Uso (CLI)
 
 ```bash
 # Narrar um arquivo (padrão: pt-br, narradora pf_dora) → gera <arquivo>.wav
