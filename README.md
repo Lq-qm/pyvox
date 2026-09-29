@@ -55,6 +55,7 @@ O que a UI oferece:
 - 🎚️ velocidade, threads de CPU e limite de caracteres
 - ⏳ progresso em tempo real (chunk a chunk, com RTF ao final)
 - ▶️ player com autoplay + download; arquivos ficam salvos em `saida/`
+- 📚 **batch (fila de `.txt`)**: envie vários arquivos e eles são convertidos **um a um, na ordem** (FIFO), com log de progresso por arquivo, pulo de arquivos vazios, lista de downloads e botão **Cancelar** (age no próximo chunk)
 
 O modelo Kokoro fica em cache na memória do processo — o 1º clique baixa
 (~330 MB), os seguintes são instantâneos. Para livros inteiros, prefira o CLI.

@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import gradio as gr
@@ -83,6 +86,12 @@ def load_file(f):
     return gr.update(value=text)
 
 
+def _safe_name(name: str) -> str:
+    """Base de arquivo segura para nomear a saída."""
+    name = Path(name).stem
+    return re.sub(r"[^\w.\-]+", "_", name, flags=re.UNICODE).strip("_.") or "texto"
+
+
 def _estimate(text: str) -> str | None:
     """Aviso grosseiro de duração para textos longos (≈15 chars/s de fala, RTF ~0.25)."""
     n = len(text)
@@ -102,29 +111,29 @@ def generate(text: str, lang: str, narrator: str, voice: str,
              speed: float, threads: int, max_chars: float):
     text = (text or "").strip()
     if not text:
-        yield "⚠️ informe um texto (cole ou envie um `.txt`).", None, None
+        yield "⚠️ informe um texto (cole ou envie um `.txt`).", None
         return
     if max_chars and max_chars > 0:
         text = text[: int(max_chars)]
     if not text.strip():
-        yield "⚠️ o texto está vazio.", None, None
+        yield "⚠️ o texto está vazio.", None
         return
 
     try:
         voice_name = resolve_voice(lang, narrator, voice)
     except ValueError as e:
-        yield f"⚠️ {e}", None, None
+        yield f"⚠️ {e}", None
         return
 
     est = _estimate(text)
     if est:
-        yield est, None, None
+        yield est, None
 
     SaidaDir.mkdir(parents=True, exist_ok=True)
     out = SaidaDir / f"pyvox_{time.strftime('%Y%m%d_%H%M%S')}.wav"
     status0 = f"🎙️ iniciando síntese — voz **{voice_name}**, {lang}, " \
               f"velocidade {speed:.2f}x…"
-    yield status0, None, None
+    yield status0, None
 
     try:
         stats: dict | None = None
@@ -133,7 +142,7 @@ def generate(text: str, lang: str, narrator: str, voice: str,
             if isinstance(item, dict):
                 stats = item
             else:
-                yield f"🎙️ {item}", None, None
+                yield f"🎙️ {item}", None
 
         assert stats is not None
         status = (
@@ -142,11 +151,116 @@ def generate(text: str, lang: str, narrator: str, voice: str,
             f"(RTF {stats['rtf']:.2f})\n\n"
             f"salvo em `{out}`"
         )
-        yield status, str(out), None
+        yield status, str(out)
     except KeyboardInterrupt:
-        yield "⛔ interrompido — o áudio parcial ficou salvo em `" + str(out) + "`.", str(out), None
+        yield "⛔ interrompido — o áudio parcial ficou salvo em `" + str(out) + "`.", str(out)
     except Exception as e:
-        yield f"❌ erro na síntese: {e}", None, None
+        yield f"❌ erro na síntese: {e}", None
+
+
+# --------------------------------------------------------------------------- #
+# Batch — fila de vários .txt
+# --------------------------------------------------------------------------- #
+CANCEL = threading.Event()  # sinal de cancelamento checado entre chunks
+
+
+def _batch_item(f, limit: float):
+    """Extrai (nome, texto) de um arquivo enviado; None se ilegível/vazio."""
+    path = getattr(f, "path", None) or (f.get("path") if isinstance(f, dict) else f)
+    if not path:
+        return None
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not text:
+        return None
+    if limit and limit > 0:
+        text = text[: int(limit)].strip()
+    if not text:
+        return None
+    return Path(path).stem, text
+
+
+def batch_generate(files, lang: str, narrator: str, voice: str,
+                   speed: float, threads: float, max_chars: float):
+    """Processa vários .txt em Fila (FIFO): um a um, com log e downloads."""
+    if not files:
+        yield "⚠️ envie pelo menos 1 arquivo `.txt`.", None
+        return
+    files = files if isinstance(files, list) else [files]
+
+    try:
+        voice_name = resolve_voice(lang, narrator, voice)
+    except ValueError as e:
+        yield f"⚠️ {e}", None
+        return
+
+    total = len(files)
+    CANCEL.clear()
+    SaidaDir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    done: list[str] = []
+    skipped = failed = 0
+    log = [f"📚 **fila:** {total} arquivo(s) · voz **{voice_name}** · {lang} · "
+           f"{speed:.2f}x", ""]
+    yield "\n".join(log), None
+
+    for idx, f in enumerate(files, 1):
+        if CANCEL.is_set():
+            log.append("⛔ **cancelado** pelo usuário — parando a fila.")
+            break
+
+        item = _batch_item(f, max_chars or 0)
+        if item is None:
+            skipped += 1
+            log.append(f"[{idx}/{total}] ⏭️ ilegível ou vazio — ignorado.")
+            yield "\n".join(log), (done or None)
+            continue
+
+        name, text = item
+        out = SaidaDir / f"pyvox_batch_{ts}_{idx:02d}_{_safe_name(name)}.wav"
+        line = f"[{idx}/{total}] ▶️ `{name}` — {len(text):,} chars…"
+        log.append(line)
+        yield "\n".join(log), (done or None)
+
+        try:
+            stats = None
+            for chunk in pyvox.synthesize_stream(text, lang, voice_name, float(speed),
+                                                 str(out), threads=int(threads or 0)):
+                if CANCEL.is_set():
+                    log[-1] = f"[{idx}/{total}] ⛔ `{name}` — cancelado (parcial: `{out.name}`)"
+                    raise KeyboardInterrupt
+                if isinstance(chunk, dict):
+                    stats = chunk
+                else:
+                    log[-1] = f"[{idx}/{total}] ▶️ `{name}` — {chunk}"
+                yield "\n".join(log), (done or None)
+
+            assert stats is not None
+            done.append(str(out))
+            log[-1] = (f"[{idx}/{total}] ✅ `{name}` — {stats['audio_seconds']:.1f}s de áudio · "
+                       f"{stats['chunks']} chunks · RTF {stats['rtf']:.2f} → `{out.name}`")
+        except KeyboardInterrupt:
+            if not CANCEL.is_set():
+                log[-1] = f"[{idx}/{total}] ⛔ `{name}` — interrompido."
+            failed += 1
+        except Exception as e:
+            failed += 1
+            log[-1] = f"[{idx}/{total}] ❌ `{name}` — {e}"
+        log.append("")
+        yield "\n".join(log), (done or None)
+
+    resumo = (f"**resumo:** {len(done)} ok · {skipped} ignorado(s) · "
+              f"{failed} falha(s) — arquivos em `saida/`")
+    log.append(resumo)
+    yield "\n".join(log), (done or None)
+
+
+def cancel_batch() -> str:
+    CANCEL.set()
+    return "⏹ cancelando após o chunk atual…"
 
 
 # --------------------------------------------------------------------------- #
@@ -196,6 +310,31 @@ def build_demo() -> gr.Blocks:
 
             status = gr.Markdown("aguardando…")
             audio = gr.Audio(type="filepath", label="Áudio", autoplay=True)
+
+            # ------------------------- BATCH (fila de .txt) ----------------- #
+            gr.Markdown("---\n### 📚 Batch — vários `.txt` em fila")
+            batch_files = gr.File(label="Arquivos .txt (seleção múltipla)",
+                                  file_types=[".txt", ".md"], file_count="multiple")
+            with gr.Row():
+                b_lang = gr.Dropdown(lang_options, value="pt-br", label="Idioma", scale=1)
+                b_narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
+                                      label="Narrador", scale=2)
+            b_voice = gr.Dropdown(["automática"], value="automática",
+                                  label="Voz exata (opcional)")
+            with gr.Row():
+                b_speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
+                                    label="Velocidade (1.0 = natural)")
+                b_threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
+                                      label="Threads de CPU")
+            b_maxchars = gr.Number(0, None, step=1000, precision=0,
+                                   label="Máx. de caracteres por arquivo (0 = sem limite)")
+            with gr.Row():
+                b_run = gr.Button("▶️ Processar fila", variant="primary", scale=2)
+                b_cancel = gr.Button("⏹ Cancelar", scale=1)
+            b_status = gr.Markdown("fila vazia — envie arquivos e clique em **Processar fila**. "
+                                   "Eles são convertidos **um a um, na ordem** (FIFO).")
+            b_downloads = gr.File(label="Resultados (clique para baixar)",
+                                  file_count="multiple")
         gr.Markdown(
             "<details><summary>💡 dicas</summary><br>"
             "• O **primeiro clique** baixa o modelo Kokoro-82M (~330 MB) — depois fica em cache.<br>"
@@ -208,12 +347,21 @@ def build_demo() -> gr.Blocks:
         # Vozes disponíveis mudam com o idioma
         lang.change(fn=lambda l: gr.Dropdown(choices=_voices_for(l), value="automática"),
                     inputs=[lang], outputs=[voice])
+        b_lang.change(fn=lambda l: gr.Dropdown(choices=_voices_for(l), value="automática"),
+                      inputs=[b_lang], outputs=[b_voice])
 
         btn.click(
             fn=generate,
             inputs=[text_box, lang, narrator, voice, speed, threads, max_chars_in],
             outputs=[status, audio],
         )
+
+        b_run.click(
+            fn=batch_generate,
+            inputs=[batch_files, b_lang, b_narrator, b_voice, b_speed, b_threads, b_maxchars],
+            outputs=[b_status, b_downloads],
+        )
+        b_cancel.click(fn=cancel_batch, outputs=[b_status])
 
     return demo
 
