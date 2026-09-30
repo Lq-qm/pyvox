@@ -278,63 +278,71 @@ def build_demo() -> gr.Blocks:
         )
 
         with gr.Column(elem_id="pyvox-col"):
-            text_box = gr.Textbox(
-                label="Texto",
-                placeholder=(
-                    "Cole seu texto aqui…\n\n"
-                    "“Era uma noite de inverno, e a cidade dormia sob um "
-                    "silêncio profundo. Mas quem percebeu a primeira estrela?”"
-                ),
-                lines=8,
-            )
-            with gr.Row():
-                file_in = gr.File(label="ou envie um arquivo .txt",
-                                  file_types=[".txt", ".md"],
-                                  file_count="single", scale=3)
-                load_btn = gr.Button("➜ carregar no editor", scale=1)
-            load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
-            with gr.Row():
-                lang = gr.Dropdown(lang_options, value="pt-br", label="Idioma", scale=1)
-                narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
-                                    label="Narrador", scale=2)
-            voice = gr.Dropdown(["automática"], value="automática",
-                                label="Voz exata (opcional)")
-            with gr.Row():
-                speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
-                                  label="Velocidade (1.0 = natural)")
-                threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
-                                    label="Threads de CPU")
-            max_chars_in = gr.Number(0, None, step=100, precision=0,
-                                     label="Máx. de caracteres (0 = sem limite)")
-            btn = gr.Button("🎧 Gerar narração", variant="primary")
+            with gr.Tabs():
+                # ------------------------- ABA: ARQUIVO ÚNICO ---------------- #
+                with gr.Tab("📄 Arquivo único"):
+                    text_box = gr.Textbox(
+                        label="Texto",
+                        placeholder=(
+                            "Cole seu texto aqui…\n\n"
+                            "“Era uma noite de inverno, e a cidade dormia sob um "
+                            "silêncio profundo. Mas quem percebeu a primeira estrela?”"
+                        ),
+                        lines=8,
+                    )
+                    with gr.Row():
+                        file_in = gr.File(label="ou envie um arquivo .txt",
+                                          file_types=[".txt", ".md"],
+                                          file_count="single", scale=3)
+                        load_btn = gr.Button("➜ carregar no editor", scale=1)
+                    load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
+                    with gr.Row():
+                        lang = gr.Dropdown(lang_options, value="pt-br",
+                                           label="Idioma", scale=1)
+                        narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
+                                            label="Narrador", scale=2)
+                    voice = gr.Dropdown(["automática"], value="automática",
+                                        label="Voz exata (opcional)")
+                    with gr.Row():
+                        speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
+                                          label="Velocidade (1.0 = natural)")
+                        threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
+                                            label="Threads de CPU")
+                    max_chars_in = gr.Number(0, None, step=100, precision=0,
+                                             label="Máx. de caracteres (0 = sem limite)")
+                    btn = gr.Button("🎧 Gerar narração", variant="primary")
 
-            status = gr.Markdown("aguardando…")
-            audio = gr.Audio(type="filepath", label="Áudio", autoplay=True)
+                    status = gr.Markdown("aguardando…")
+                    audio = gr.Audio(type="filepath", label="Áudio", autoplay=True)
 
-            # ------------------------- BATCH (fila de .txt) ----------------- #
-            gr.Markdown("---\n### 📚 Batch — vários `.txt` em fila")
-            batch_files = gr.File(label="Arquivos .txt (seleção múltipla)",
-                                  file_types=[".txt", ".md"], file_count="multiple")
-            with gr.Row():
-                b_lang = gr.Dropdown(lang_options, value="pt-br", label="Idioma", scale=1)
-                b_narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
-                                      label="Narrador", scale=2)
-            b_voice = gr.Dropdown(["automática"], value="automática",
-                                  label="Voz exata (opcional)")
-            with gr.Row():
-                b_speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
-                                    label="Velocidade (1.0 = natural)")
-                b_threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
-                                      label="Threads de CPU")
-            b_maxchars = gr.Number(0, None, step=1000, precision=0,
-                                   label="Máx. de caracteres por arquivo (0 = sem limite)")
-            with gr.Row():
-                b_run = gr.Button("▶️ Processar fila", variant="primary", scale=2)
-                b_cancel = gr.Button("⏹ Cancelar", scale=1)
-            b_status = gr.Markdown("fila vazia — envie arquivos e clique em **Processar fila**. "
-                                   "Eles são convertidos **um a um, na ordem** (FIFO).")
-            b_downloads = gr.File(label="Resultados (clique para baixar)",
-                                  file_count="multiple")
+                # ------------------- ABA: VÁRIOS ARQUIVOS (FILA) ------------- #
+                with gr.Tab("📚 Vários arquivos (fila)"):
+                    gr.Markdown(
+                        "Envie vários `.txt` de uma vez: eles são convertidos **um a um, "
+                        "na ordem** (FIFO), com log de progresso e lista de downloads."
+                    )
+                    batch_files = gr.File(label="Arquivos .txt (seleção múltipla)",
+                                          file_types=[".txt", ".md"], file_count="multiple")
+                    with gr.Row():
+                        b_lang = gr.Dropdown(lang_options, value="pt-br",
+                                             label="Idioma", scale=1)
+                        b_narrator = gr.Radio(NARRATOR_LABELS, value=NARRATOR_LABELS[0],
+                                              label="Narrador", scale=2)
+                    b_voice = gr.Dropdown(["automática"], value="automática",
+                                          label="Voz exata (opcional)")
+                    with gr.Row():
+                        b_speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
+                                            label="Velocidade (1.0 = natural)")
+                        b_threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
+                                              label="Threads de CPU")
+                    b_maxchars = gr.Number(0, None, step=1000, precision=0,
+                                           label="Máx. de caracteres por arquivo (0 = sem limite)")
+                    with gr.Row():
+                        b_run = gr.Button("▶️ Processar fila", variant="primary", scale=2)
+                        b_cancel = gr.Button("⏹ Cancelar", scale=1)
+                    b_status = gr.Markdown("fila vazia — envie arquivos e clique em **Processar fila**.")
+                    b_downloads = gr.File(label="Resultados (clique para baixar)",
+                                          file_count="multiple")
         gr.Markdown(
             "<details><summary>💡 dicas</summary><br>"
             "• O **primeiro clique** baixa o modelo Kokoro-82M (~330 MB) — depois fica em cache.<br>"

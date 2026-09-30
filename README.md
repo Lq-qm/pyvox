@@ -138,3 +138,10 @@ modelo pronto em 1.3s
 | zh | `zm_yunjian` | `zf_xiaobei` |
 
 Outras vozes por idioma existem — veja `--list-voices` e use `--voice`.
+
+## 📝 Notas
+
+- A **1ª execução** baixa o modelo (~330 MB) e a voz escolhida do Hugging Face (cache em `~/.cache/huggingface`).
+- Textos longos em CPU podem demorar — use `--max-chars` para testar; `Ctrl+C` interrompe mantendo o áudio já gerado.
+- Para GPU no futuro: basta trocar `device="cpu"` por `"cuda"` em `pyvox.py`.
+
