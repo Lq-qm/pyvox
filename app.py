@@ -18,8 +18,6 @@ import os
 import re
 import sys
 import threading
-import time
-from datetime import datetime
 from pathlib import Path
 
 import gradio as gr
@@ -86,10 +84,26 @@ def load_file(f):
     return gr.update(value=text)
 
 
-def _safe_name(name: str) -> str:
-    """Base de arquivo segura para nomear a saída."""
-    name = Path(name).stem
-    return re.sub(r"[^\w.\-]+", "_", name, flags=re.UNICODE).strip("_.") or "texto"
+def _base_name(name: str) -> str:
+    """Base de saída a partir do nome do arquivo de entrada (preserva espaços/acentos).
+
+    Ex.: ``"nome do arquivo de entrada.txt"`` → ``"nome do arquivo de entrada"``.
+    """
+    stem = Path(name).stem
+    stem = re.sub(r"[\\/:*\"<>|\x00-\x1f]", " ", stem)   # só remove caracteres ilegais
+    stem = re.sub(r"\s+", " ", stem).strip(" .")
+    return stem or "texto"
+
+
+def _unique_out(base: str) -> Path:
+    """Caminho em saida/ com o nome base; sufixa _2, _3… se já existir (não sobrescreve)."""
+    SaidaDir.mkdir(parents=True, exist_ok=True)
+    cand = SaidaDir / f"{base}.wav"
+    i = 2
+    while cand.exists():
+        cand = SaidaDir / f"{base}_{i}.wav"
+        i += 1
+    return cand
 
 
 def _estimate(text: str) -> str | None:
@@ -107,7 +121,7 @@ def _estimate(text: str) -> str | None:
 # --------------------------------------------------------------------------- #
 # Geração (generator → progresso em tempo real no Gradio)
 # --------------------------------------------------------------------------- #
-def generate(text: str, lang: str, narrator: str, voice: str,
+def generate(file_in, text: str, lang: str, narrator: str, voice: str,
              speed: float, threads: int, max_chars: float):
     text = (text or "").strip()
     if not text:
@@ -129,10 +143,13 @@ def generate(text: str, lang: str, narrator: str, voice: str,
     if est:
         yield est, None
 
-    SaidaDir.mkdir(parents=True, exist_ok=True)
-    out = SaidaDir / f"pyvox_{time.strftime('%Y%m%d_%H%M%S')}.wav"
+    # Nome da saída = nome do arquivo de entrada (ex.: livro.txt → livro.wav)
+    fpath = getattr(file_in, "path", None) or (
+        file_in.get("path") if isinstance(file_in, dict) else file_in)
+    base = _base_name(fpath) if fpath else "texto"
+    out = _unique_out(base)
     status0 = f"🎙️ iniciando síntese — voz **{voice_name}**, {lang}, " \
-              f"velocidade {speed:.2f}x…"
+              f"velocidade {speed:.2f}x → `{out.name}`…"
     yield status0, None
 
     try:
@@ -179,7 +196,7 @@ def _batch_item(f, limit: float):
         text = text[: int(limit)].strip()
     if not text:
         return None
-    return Path(path).stem, text
+    return Path(path).name, text
 
 
 def batch_generate(files, lang: str, narrator: str, voice: str,
@@ -198,8 +215,6 @@ def batch_generate(files, lang: str, narrator: str, voice: str,
 
     total = len(files)
     CANCEL.clear()
-    SaidaDir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     done: list[str] = []
     skipped = failed = 0
@@ -220,7 +235,7 @@ def batch_generate(files, lang: str, narrator: str, voice: str,
             continue
 
         name, text = item
-        out = SaidaDir / f"pyvox_batch_{ts}_{idx:02d}_{_safe_name(name)}.wav"
+        out = _unique_out(_base_name(name))
         line = f"[{idx}/{total}] ▶️ `{name}` — {len(text):,} chars…"
         log.append(line)
         yield "\n".join(log), (done or None)
@@ -360,7 +375,7 @@ def build_demo() -> gr.Blocks:
 
         btn.click(
             fn=generate,
-            inputs=[text_box, lang, narrator, voice, speed, threads, max_chars_in],
+            inputs=[file_in, text_box, lang, narrator, voice, speed, threads, max_chars_in],
             outputs=[status, audio],
         )
 
