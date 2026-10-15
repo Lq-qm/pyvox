@@ -300,11 +300,10 @@ def build_demo() -> gr.Blocks:
                         ),
                         lines=8,
                     )
-                    with gr.Row():
-                        file_in = gr.File(label="ou envie um arquivo .txt",
-                                          file_types=[".txt", ".md"],
-                                          file_count="single", scale=3)
-                        load_btn = gr.Button("➜ carregar no editor", scale=1)
+                    file_in = gr.File(label="ou envie um arquivo .txt",
+                                      file_types=[".txt", ".md"],
+                                      file_count="single")
+                    load_btn = gr.Button("➜ carregar no editor")
                     load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
                     with gr.Row():
                         lang = gr.Dropdown(lang_options, value="pt-br",
