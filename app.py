@@ -287,7 +287,7 @@ def build_demo() -> gr.Blocks:
         )
 
         with gr.Column(elem_id="pyvox-col"):
-            with gr.Row():
+            with gr.Row(equal_height=True):
                 # ---------------------- COLUNA: ARQUIVO ÚNICO ----------------- #
                 with gr.Column(scale=1, min_width=440):
                     gr.Markdown("### 📄 Arquivo único")
@@ -298,11 +298,11 @@ def build_demo() -> gr.Blocks:
                             "“Era uma noite de inverno, e a cidade dormia sob um "
                             "silêncio profundo. Mas quem percebeu a primeira estrela?”"
                         ),
-                        lines=8,
+                        lines=4,
                     )
                     file_in = gr.File(label="ou envie um arquivo .txt",
                                       file_types=[".txt", ".md"],
-                                      file_count="single")
+                                      file_count="single", height=90)
                     load_btn = gr.Button("➜ carregar no editor")
                     load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
                     with gr.Row():
@@ -326,7 +326,8 @@ def build_demo() -> gr.Blocks:
                 with gr.Column(scale=1, min_width=440):
                     gr.Markdown("### 📚 Vários arquivos (fila)")
                     batch_files = gr.File(label="Arquivos .txt (seleção múltipla)",
-                                          file_types=[".txt", ".md"], file_count="multiple")
+                                          file_types=[".txt", ".md"], file_count="multiple",
+                                          height=90)
                     with gr.Row():
                         b_lang = gr.Dropdown(lang_options, value="pt-br",
                                              label="Idioma", scale=1)
