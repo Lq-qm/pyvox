@@ -34,7 +34,7 @@ NARRATOR_LABELS = ["automática (padrão)", "masculino", "feminino"]
 # Coluna única centralizada (largura máxima ~740px)
 CSS = """
 #pyvox-col {
-    max-width: 740px;
+    max-width: 1180px;
     width: 100%;
     margin-left: auto;
     margin-right: auto;
@@ -293,9 +293,10 @@ def build_demo() -> gr.Blocks:
         )
 
         with gr.Column(elem_id="pyvox-col"):
-            with gr.Tabs():
-                # ------------------------- ABA: ARQUIVO ÚNICO ---------------- #
-                with gr.Tab("📄 Arquivo único"):
+            with gr.Row():
+                # ---------------------- COLUNA: ARQUIVO ÚNICO ----------------- #
+                with gr.Column(scale=1, min_width=440):
+                    gr.Markdown("### 📄 Arquivo único")
                     text_box = gr.Textbox(
                         label="Texto",
                         placeholder=(
@@ -330,8 +331,9 @@ def build_demo() -> gr.Blocks:
                     status = gr.Markdown("aguardando…")
                     audio = gr.Audio(type="filepath", label="Áudio", autoplay=True)
 
-                # ------------------- ABA: VÁRIOS ARQUIVOS (FILA) ------------- #
-                with gr.Tab("📚 Vários arquivos (fila)"):
+                # ------------------ COLUNA: VÁRIOS ARQUIVOS (FILA) ----------- #
+                with gr.Column(scale=1, min_width=440):
+                    gr.Markdown("### 📚 Vários arquivos (fila)")
                     gr.Markdown(
                         "Envie vários `.txt` de uma vez: eles são convertidos **um a um, "
                         "na ordem** (FIFO), com log de progresso e lista de downloads."
