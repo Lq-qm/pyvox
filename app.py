@@ -71,19 +71,6 @@ def resolve_voice(lang: str, narrator: str, voice: str) -> str:
     return pyvox.DEFAULT_VOICES[code]
 
 
-def load_file(f):
-    """Lê o arquivo enviado e devolve o texto para o editor."""
-    if f is None:
-        return gr.update()
-    if isinstance(f, list):
-        f = f[0]
-    path = getattr(f, "path", None) or (f.get("path") if isinstance(f, dict) else f)
-    if not path:
-        return gr.update()
-    text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return gr.update(value=text)
-
-
 def _base_name(name: str) -> str:
     """Base de saída a partir do nome do arquivo de entrada (preserva espaços/acentos).
 
@@ -123,12 +110,17 @@ def _estimate(text: str) -> str | None:
 # --------------------------------------------------------------------------- #
 def generate(file_in, text: str, lang: str, narrator: str, voice: str,
              speed: float, threads: int):
+    fpath = getattr(file_in, "path", None) or (
+        file_in.get("path") if isinstance(file_in, dict) else file_in)
     text = (text or "").strip()
+    if not text and fpath:
+        # editor vazio + arquivo enviado → lê o conteúdo do arquivo
+        try:
+            text = Path(fpath).read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            pass
     if not text:
         yield "⚠️ informe um texto (cole ou envie um `.txt`).", None
-        return
-    if not text.strip():
-        yield "⚠️ o texto está vazio.", None
         return
 
     try:
@@ -142,8 +134,6 @@ def generate(file_in, text: str, lang: str, narrator: str, voice: str,
         yield est, None
 
     # Nome da saída = nome do arquivo de entrada (ex.: livro.txt → livro.wav)
-    fpath = getattr(file_in, "path", None) or (
-        file_in.get("path") if isinstance(file_in, dict) else file_in)
     base = _base_name(fpath) if fpath else "texto"
     out = _unique_out(base)
     status0 = f"🎙️ iniciando síntese — voz **{voice_name}**, {lang}, " \
@@ -303,8 +293,6 @@ def build_demo() -> gr.Blocks:
                     file_in = gr.File(label="ou envie um arquivo .txt",
                                       file_types=[".txt", ".md"],
                                       file_count="single", height=160)
-                    load_btn = gr.Button("➜ carregar no editor")
-                    load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
                     with gr.Row():
                         lang = gr.Dropdown(lang_options, value="pt-br",
                                            label="Idioma", scale=1)
