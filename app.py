@@ -326,10 +326,6 @@ def build_demo() -> gr.Blocks:
                 # ------------------ COLUNA: VÁRIOS ARQUIVOS (FILA) ----------- #
                 with gr.Column(scale=1, min_width=440):
                     gr.Markdown("### 📚 Vários arquivos (fila)")
-                    gr.Markdown(
-                        "Envie vários `.txt` de uma vez: eles são convertidos **um a um, "
-                        "na ordem** (FIFO), com log de progresso e lista de downloads."
-                    )
                     batch_files = gr.File(label="Arquivos .txt (seleção múltipla)",
                                           file_types=[".txt", ".md"], file_count="multiple")
                     with gr.Row():
