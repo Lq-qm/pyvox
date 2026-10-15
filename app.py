@@ -122,13 +122,11 @@ def _estimate(text: str) -> str | None:
 # Geração (generator → progresso em tempo real no Gradio)
 # --------------------------------------------------------------------------- #
 def generate(file_in, text: str, lang: str, narrator: str, voice: str,
-             speed: float, threads: int, max_chars: float):
+             speed: float, threads: int):
     text = (text or "").strip()
     if not text:
         yield "⚠️ informe um texto (cole ou envie um `.txt`).", None
         return
-    if max_chars and max_chars > 0:
-        text = text[: int(max_chars)]
     if not text.strip():
         yield "⚠️ o texto está vazio.", None
         return
@@ -181,7 +179,7 @@ def generate(file_in, text: str, lang: str, narrator: str, voice: str,
 CANCEL = threading.Event()  # sinal de cancelamento checado entre chunks
 
 
-def _batch_item(f, limit: float):
+def _batch_item(f):
     """Extrai (nome, texto) de um arquivo enviado; None se ilegível/vazio."""
     path = getattr(f, "path", None) or (f.get("path") if isinstance(f, dict) else f)
     if not path:
@@ -192,15 +190,11 @@ def _batch_item(f, limit: float):
         return None
     if not text:
         return None
-    if limit and limit > 0:
-        text = text[: int(limit)].strip()
-    if not text:
-        return None
     return Path(path).name, text
 
 
 def batch_generate(files, lang: str, narrator: str, voice: str,
-                   speed: float, threads: float, max_chars: float):
+                   speed: float, threads: float):
     """Processa vários .txt em Fila (FIFO): um a um, com log e downloads."""
     if not files:
         yield "⚠️ envie pelo menos 1 arquivo `.txt`.", None
@@ -227,7 +221,7 @@ def batch_generate(files, lang: str, narrator: str, voice: str,
             log.append("⛔ **cancelado** pelo usuário — parando a fila.")
             break
 
-        item = _batch_item(f, max_chars or 0)
+        item = _batch_item(f)
         if item is None:
             skipped += 1
             log.append(f"[{idx}/{total}] ⏭️ ilegível ou vazio — ignorado.")
@@ -324,8 +318,6 @@ def build_demo() -> gr.Blocks:
                                           label="Velocidade (1.0 = natural)")
                         threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
                                             label="Threads de CPU")
-                    max_chars_in = gr.Number(0, None, step=100, precision=0,
-                                             label="Máx. de caracteres (0 = sem limite)")
                     btn = gr.Button("🎧 Gerar narração", variant="primary")
 
                     status = gr.Markdown("aguardando…")
@@ -352,8 +344,6 @@ def build_demo() -> gr.Blocks:
                                             label="Velocidade (1.0 = natural)")
                         b_threads = gr.Slider(1, max(4, cpu), value=cpu, step=1,
                                               label="Threads de CPU")
-                    b_maxchars = gr.Number(0, None, step=1000, precision=0,
-                                           label="Máx. de caracteres por arquivo (0 = sem limite)")
                     with gr.Row():
                         b_run = gr.Button("▶️ Processar fila", variant="primary", scale=2)
                         b_cancel = gr.Button("⏹ Cancelar", scale=1)
@@ -377,13 +367,13 @@ def build_demo() -> gr.Blocks:
 
         btn.click(
             fn=generate,
-            inputs=[file_in, text_box, lang, narrator, voice, speed, threads, max_chars_in],
+            inputs=[file_in, text_box, lang, narrator, voice, speed, threads],
             outputs=[status, audio],
         )
 
         b_run.click(
             fn=batch_generate,
-            inputs=[batch_files, b_lang, b_narrator, b_voice, b_speed, b_threads, b_maxchars],
+            inputs=[batch_files, b_lang, b_narrator, b_voice, b_speed, b_threads],
             outputs=[b_status, b_downloads],
         )
         b_cancel.click(fn=cancel_batch, outputs=[b_status])
