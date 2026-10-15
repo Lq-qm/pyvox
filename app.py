@@ -302,7 +302,7 @@ def build_demo() -> gr.Blocks:
                     )
                     file_in = gr.File(label="ou envie um arquivo .txt",
                                       file_types=[".txt", ".md"],
-                                      file_count="single", height=90)
+                                      file_count="single", height=160)
                     load_btn = gr.Button("➜ carregar no editor")
                     load_btn.click(fn=load_file, inputs=[file_in], outputs=[text_box])
                     with gr.Row():
@@ -327,7 +327,7 @@ def build_demo() -> gr.Blocks:
                     gr.Markdown("### 📚 Vários arquivos (fila)")
                     batch_files = gr.File(label="Arquivos .txt (seleção múltipla)",
                                           file_types=[".txt", ".md"], file_count="multiple",
-                                          height=90)
+                                          height=160)
                     with gr.Row():
                         b_lang = gr.Dropdown(lang_options, value="pt-br",
                                              label="Idioma", scale=1)
