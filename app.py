@@ -109,7 +109,7 @@ def _estimate(text: str) -> str | None:
 # Geração (generator → progresso em tempo real no Gradio)
 # --------------------------------------------------------------------------- #
 def generate(file_in, text: str, lang: str, narrator: str, voice: str,
-             speed: float, threads: int):
+             speed: float, threads: int, fmt: str = "wav"):
     fpath = getattr(file_in, "path", None) or (
         file_in.get("path") if isinstance(file_in, dict) else file_in)
     text = (text or "").strip()
@@ -150,6 +150,11 @@ def generate(file_in, text: str, lang: str, narrator: str, voice: str,
                 yield f"🎙️ {item}", None
 
         assert stats is not None
+        if (fmt or "wav").lower() == "mp3":
+            mp3 = out.with_suffix(".mp3")
+            pyvox.encode_mp3(out, mp3)
+            out.unlink()  # remove o WAV intermediário
+            out = mp3
         status = (
             f"✅ **pronto!** {stats['audio_seconds']:.1f}s de áudio · "
             f"{stats['chunks']} chunks · {stats['elapsed']:.1f}s de processamento "
@@ -184,7 +189,7 @@ def _batch_item(f):
 
 
 def batch_generate(files, lang: str, narrator: str, voice: str,
-                   speed: float, threads: float):
+                   speed: float, threads: float, fmt: str = "wav"):
     """Processa vários .txt em Fila (FIFO): um a um, com log e downloads."""
     if not files:
         yield "⚠️ envie pelo menos 1 arquivo `.txt`.", None
@@ -238,6 +243,11 @@ def batch_generate(files, lang: str, narrator: str, voice: str,
                 yield "\n".join(log), (done or None)
 
             assert stats is not None
+            if (fmt or "wav").lower() == "mp3":
+                mp3 = out.with_suffix(".mp3")
+                pyvox.encode_mp3(out, mp3)
+                out.unlink()  # remove o WAV intermediário
+                out = mp3
             done.append(str(out))
             log[-1] = (f"[{idx}/{total}] ✅ `{name}` — {stats['audio_seconds']:.1f}s de áudio · "
                        f"{stats['chunks']} chunks · RTF {stats['rtf']:.2f} → `{out.name}`")
@@ -300,6 +310,8 @@ def build_demo() -> gr.Blocks:
                                             label="Narrador", scale=2)
                     voice = gr.Dropdown(["automática"], value="automática",
                                         label="Voz exata (opcional)")
+                    fmt = gr.Dropdown(["wav", "mp3"], value="wav",
+                                      label="Formato da saída (.wav / .mp3)")
                     with gr.Row():
                         speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
                                           label="Velocidade (1.0 = natural)")
@@ -323,6 +335,8 @@ def build_demo() -> gr.Blocks:
                                               label="Narrador", scale=2)
                     b_voice = gr.Dropdown(["automática"], value="automática",
                                           label="Voz exata (opcional)")
+                    b_fmt = gr.Dropdown(["wav", "mp3"], value="wav",
+                                        label="Formato da saída (.wav / .mp3)")
                     with gr.Row():
                         b_speed = gr.Slider(0.5, 2.0, value=1.0, step=0.05,
                                             label="Velocidade (1.0 = natural)")
@@ -351,13 +365,13 @@ def build_demo() -> gr.Blocks:
 
         btn.click(
             fn=generate,
-            inputs=[file_in, text_box, lang, narrator, voice, speed, threads],
+            inputs=[file_in, text_box, lang, narrator, voice, speed, threads, fmt],
             outputs=[status, audio],
         )
 
         b_run.click(
             fn=batch_generate,
-            inputs=[batch_files, b_lang, b_narrator, b_voice, b_speed, b_threads],
+            inputs=[batch_files, b_lang, b_narrator, b_voice, b_speed, b_threads, b_fmt],
             outputs=[b_status, b_downloads],
         )
         b_cancel.click(fn=cancel_batch, outputs=[b_status])

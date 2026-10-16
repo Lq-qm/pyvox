@@ -14,6 +14,9 @@ huggingface_hub>=0.34,<0.35
 # Escrita de WAV
 soundfile>=0.12.0
 
+# Conversão WAV → MP3 (usa o ffmpeg do sistema; instale o ffmpeg se faltar)
+pydub>=0.25
+
 # Interface web (Gradio). Instale DEPOIS dos pins acima: o gradio depende
 # de huggingface-hub e pode tentar puxar a v1.x, quebrando o pin <0.35.
 gradio>=6

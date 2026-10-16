@@ -114,6 +114,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="número de threads da CPU (padrão: todos os núcleos)")
     p.add_argument("--max-chars", type=int, default=None,
                    help="limitar a narração aos N primeiros caracteres (útil para testes)")
+    p.add_argument("-f", "--format", choices=["wav", "mp3"], default="wav",
+                   help="formato de saída: wav ou mp3 (padrão: wav)")
     p.add_argument("--play", action="store_true", help="tocar o áudio ao final (ffplay/mpv/aplay)")
     p.add_argument("--list-voices", action="store_true", help="listar vozes disponíveis e sair")
     return p.parse_args(argv)
@@ -235,6 +237,21 @@ def synthesize(text: str, lang: str, voice: str, speed: float, output: str, thre
 
 
 # --------------------------------------------------------------------------- #
+# Conversão para MP3
+# --------------------------------------------------------------------------- #
+def encode_mp3(wav: Path, mp3: Path, bitrate_kbps: int = 128) -> Path:
+    """Converte um WAV em MP3 (usa o ffmpeg do sistema via pydub)."""
+    try:
+        from pydub import AudioSegment
+    except ImportError as e:
+        raise RuntimeError("pydub não está instalado (pip install pydub) — "
+                           "e o ffmpeg precisa estar no PATH") from e
+    seg = AudioSegment.from_wav(str(wav))
+    seg.export(str(mp3), format="mp3", bitrate=f"{bitrate_kbps}k")
+    return mp3
+
+
+# --------------------------------------------------------------------------- #
 # Reprodução
 # --------------------------------------------------------------------------- #
 def play(path: str) -> bool:
@@ -290,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         print("erro: o texto está vazio", file=sys.stderr)
         return 1
 
-    output = args.output or f"{base}.wav"
+    output = args.output or f"{base}.{args.format}"
 
     # Voz: --voice (exata) > --narrador (m/f) > padrão do idioma
     lang_code = LANGS[args.lang]
@@ -307,17 +324,27 @@ def main(argv: list[str] | None = None) -> int:
     else:
         voice = DEFAULT_VOICES[lang_code]
 
+    # A síntese sempre grava em WAV; se o formato pedido for MP3, converte depois.
+    wav_out = Path(output) if output.lower().endswith(".wav") else Path(output).with_suffix(".wav")
     try:
-        stats = synthesize(text, args.lang, voice, args.speed, output, args.threads)
+        stats = synthesize(text, args.lang, voice, args.speed, str(wav_out), args.threads)
     except KeyboardInterrupt:
-        print("\ninterrompido. áudio parcial mantido em:", output, file=sys.stderr)
+        print("\ninterrompido. áudio parcial mantido em:", wav_out, file=sys.stderr)
         return 130
     except Exception as e:
         print(f"erro na síntese: {e}", file=sys.stderr)
         return 1
 
+    final = Path(stats["output"])
+    if args.format == "mp3":
+        mp3 = Path(output) if output.lower().endswith(".mp3") else final.with_suffix(".mp3")
+        encode_mp3(final, mp3)
+        if mp3 != final:
+            final.unlink()  # remove o WAV intermediário
+        final = mp3
+
     print(
-        f"✔ salva em {stats['output']} | "
+        f"✔ salva em {final} | "
         f"{stats['audio_seconds']:.1f}s de áudio | "
         f"{stats['chunks']} chunks | "
         f"{stats['elapsed']:.1f}s de processamento | "
@@ -325,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.play:
-        if play(output):
+        if play(str(final)):
             print("▶ tocando… (Ctrl+C para parar)")
         else:
             print("aviso: nenhum player encontrado (ffplay/mpv/aplay); abra o arquivo manualmente", file=sys.stderr)
