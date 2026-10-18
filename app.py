@@ -42,6 +42,22 @@ CSS = """
 """
 
 
+class TemaVerde(gr.themes.Soft):
+    """Tema Soft com a paleta primária/segundária em verde (escala Tailwind 'green')."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        verde = {
+            "50": "#f0fdf4", "100": "#dcfce7", "200": "#bbf7d0",
+            "300": "#86efac", "400": "#4ade80", "500": "#22c55e",
+            "600": "#16a34a", "700": "#15803d", "800": "#166534",
+            "900": "#14532d", "950": "#052e16",
+        }
+        for n, cor in verde.items():
+            setattr(self, f"primary_{n}", cor)
+            setattr(self, f"secondary_{n}", cor)
+
+
 def _voices_for(lang: str) -> list[str]:
     """Vozes do idioma (Hugging Face com fallback offline), sempre com 'automática'."""
     try:
@@ -405,7 +421,7 @@ def main() -> None:
     demo = build_demo()
     demo.queue(default_concurrency_limit=1, api_open=False)  # 1 síntese por vez (CPU)
     demo.launch(server_name=args.host, server_port=args.port,
-                theme=gr.themes.Soft(), css=CSS,
+                theme=TemaVerde(), css=CSS,
                 share=args.share, inbrowser=False)
 
 
